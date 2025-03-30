@@ -1,0 +1,134 @@
+# Ollama API Proxy
+
+This is a simple FastAPI-based reverse proxy for forwarding API requests to an [Ollama](https://ollama.com) server. It ensures that only requests with a valid **API key** are allowed to access the Ollama backend. It supports all HTTP methods and handles both regular and **streaming** responses. If certificate and key files are provided, it will run with **HTTPS**.
+
+---
+
+## Features
+
+- API key protection for all request types
+- Rate limiting to prevent abuse
+- CORS support for cross-origin requests
+- Optional HTTPS with cert/key file configuration
+- Robust error handling and logging
+- Support image messages for vision models
+
+---
+
+## Prerequisites
+
+- Python 3.8+
+- Ollama running and reachable
+
+---
+
+## Usage
+
+```bash
+python main.py
+```
+
+## Installation
+
+### Clone the repository
+```bash
+git clone https://github.com/alfredwallace7/ollama-proxy.git
+cd ollama-proxy
+```
+
+### Create a virtual environment
+```bash
+python -m venv venv
+```
+
+### Install dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### Activate the virtual environment
+
+#### Windows
+```bash
+.venv\Scripts\activate
+```
+
+#### Linux/Mac
+```bash
+source venv/bin/activate
+```
+
+## Configuration
+
+### Rename sample.env to .env
+
+```ini
+API_KEY=your_custom_api_key
+OLLAMA_URL=http://localhost:11434
+API_HOST=0.0.0.0
+API_PORT=11435
+API_SSL_CERTFILE=./cert.pem       # optional
+API_SSL_KEYFILE=./key.pem         # optional
+SSL_DOMAIN=my_cert_domain.com     # optional
+```
+
+## Example with openai client library
+
+```python
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://localhost:11435/v1",
+    api_key="your_custom_api_key"
+)
+
+response = client.chat.completions.create(
+    model="qwen2.5:3b",
+    messages=[
+        {"role": "user", "content": "Say hello"}
+    ]
+)
+
+print(response.choices[0].message.content)
+```
+
+## Example with Invoke-RestMethod (Windows)
+
+```powershell
+Invoke-RestMethod -Uri "https://my_cert_domain.com:11435/v1/chat/completions" -Method Post -Headers @{"Authorization"="Bearer your_custom_api_key"; "Content-Type"="application/json"} -Body (@{model="qwen2.5:3b"; messages=@(@{role="user"; content="Say hello"})} | ConvertTo-Json -Depth 10)
+
+```
+
+### Linux/Mac
+
+```bash
+curl -X POST https://my_cert_domain.com:11435/v1/chat/completions \
+     -H "Authorization: Bearer your_custom_api_key" \
+     -H "Content-Type: application/json" \
+     -d '{"model": "qwen2.5:3b", "messages": [{"role": "user", "content": "Say hello"}]}'
+```
+
+## Security Notes
+
+- The API key is checked for **all request types** to ensure maximum security
+- Rate limiting is applied to prevent abuse (default: 60 requests per minute per IP)
+- HTTPS can be enabled by providing a cert and key file
+
+## Allow the proxy to be reached from the outside (optional)
+
+### Windows
+
+```powershell
+netsh advfirewall firewall add rule name="Ollama Proxy" dir=in action=allow protocol=TCP localport=11435
+```
+
+### Debian/Ubuntu
+
+```bash
+sudo ufw allow 11435/tcp comment 'Ollama proxy'
+```
+
+## License
+
+MIT License

@@ -109,11 +109,39 @@ curl -X POST https://my_cert_domain.com:11435/v1/chat/completions \
      -d '{"model": "qwen2.5:3b", "messages": [{"role": "user", "content": "Say hello"}]}'
 ```
 
+## Systemd Service (recommended for servers)
+
+Create a service file `/etc/systemd/system/ollama-proxy.service`:
+
+```ini
+[Unit]
+Description=FastAPI Proxy to Ollama
+After=network.target
+
+[Service]
+User=your_user_name
+WorkingDirectory=/path/to/your/app
+ExecStart=/path_to_ollama_proxy/venv/bin/uvicorn main:app --host 0.0.0.0 --port 11435
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then enable and start it:
+
+```bash
+sudo systemctl daemon-reexec
+sudo systemctl daemon-reload
+sudo systemctl enable --now ollama-proxy.service
+```
+
 ## Security Notes
 
 - The API key is checked for **all request types** to ensure maximum security
 - Rate limiting is applied to prevent abuse (default: 60 requests per minute per IP)
 - HTTPS can be enabled by providing a cert and key file
+- May not be suitable for production
 
 ## Allow the proxy to be reached from the outside (optional)
 

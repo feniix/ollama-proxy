@@ -174,6 +174,8 @@ async def proxy(path: str, request: Request):
     headers = {k: v for k, v in request.headers.items()}
     headers.pop("authorization", None)
     headers.pop("x-api-key", None)
+    headers['host'] = 'localhost:11434'  # 🔧 override for Ollama
+
 
     # Handle streaming requests differently
     if is_streaming_request:
@@ -208,6 +210,11 @@ async def proxy(path: str, request: Request):
         # Handle non-streaming requests with the original code
         async with httpx.AsyncClient() as client:
             try:
+                logger.info(f"→ Forwarding to Ollama: {OLLAMA_URL}/{path}")
+                logger.info(f"→ Headers: {headers}")
+                logger.info(f"→ Params: {dict(request.query_params)}")
+                logger.info(f"→ Body: {body_bytes.decode('utf-8', errors='ignore')}")
+
                 response = await client.request(
                     method=request.method,
                     url=f"{OLLAMA_URL}/{path}",

@@ -137,6 +137,27 @@ curl -X POST https://my_cert_domain.com:11435/v1/chat/completions \
 
 This is an experimental feature and may not work perfectly with all tools or in all contexts.
 
+### Testing the Function Calling Support
+
+The repository includes test scripts to validate the function calling support. To run the tests:
+
+```bash
+# First ensure the proxy server is running
+python main.py
+
+# In another terminal, run the tests
+python test_tools.py  # Tests basic tool support
+python test_cursor_integration.py  # Tests Cursor-specific functionality
+```
+
+You can customize the test parameters:
+
+```bash
+python test_cursor_integration.py --api-key your_key --proxy-url http://localhost:11435 --model llama3
+```
+
+The tests will report whether function calling is working correctly with your configuration.
+
 ## Systemd Service (recommended for servers)
 
 Create a service file `/etc/systemd/system/ollama-proxy.service`:

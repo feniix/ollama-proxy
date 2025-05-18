@@ -12,6 +12,7 @@ This is a simple FastAPI-based reverse proxy for forwarding API requests to an [
 - Optional HTTPS with cert/key file configuration
 - Robust error handling and logging
 - Support image messages for vision models
+- Optional function calling support for Ollama models (fake tools support for Cursor)
 
 ---
 
@@ -70,6 +71,7 @@ API_PORT=11435
 API_SSL_CERTFILE=./cert.pem       # optional
 API_SSL_KEYFILE=./key.pem         # optional
 SSL_DOMAIN=my_cert_domain.com     # optional
+ENABLE_FAKE_TOOLS=false           # optional, set to "true" to enable fake function calling
 ```
 
 ## Example with openai client library
@@ -108,6 +110,32 @@ curl -X POST https://my_cert_domain.com:11435/v1/chat/completions \
      -H "Content-Type: application/json" \
      -d '{"model": "qwen2.5:3b", "messages": [{"role": "user", "content": "Say hello"}]}'
 ```
+
+## Function Calling Support for Cursor Integration
+
+This proxy includes a feature to add synthetic function calling capabilities to Ollama models, which can enable better integration with tools like Cursor that depend on function calling for advanced features.
+
+When enabled, the proxy will transform responses from Ollama models to include function calls when requested by the client, allowing Cursor to leverage its advanced features like direct file editing.
+
+To enable this feature:
+
+1. Set the `ENABLE_FAKE_TOOLS` environment variable to `true` in your `.env` file
+2. When using Cursor, it will now be able to use its advanced file editing features with Ollama models
+
+Example request with tools:
+
+```bash
+curl -X POST https://my_cert_domain.com:11435/v1/chat/completions \
+     -H "Authorization: Bearer your_custom_api_key" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "model": "qwen2.5:3b", 
+       "messages": [{"role": "user", "content": "Update the file to add logging"}],
+       "tools": [{"type": "function", "function": {"name": "edit_file", "description": "Edit a file"}}]
+     }'
+```
+
+This is an experimental feature and may not work perfectly with all tools or in all contexts.
 
 ## Systemd Service (recommended for servers)
 

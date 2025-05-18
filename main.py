@@ -11,6 +11,7 @@ import logging
 import json
 import time
 import asyncio
+import re
 from typing import Dict, List, Tuple, AsyncGenerator, Union, Optional, Any
 
 logging.basicConfig(level=logging.INFO)
@@ -25,6 +26,8 @@ if not API_KEY:
 OLLAMA_URL = os.getenv("OLLAMA_URL")
 if not OLLAMA_URL:
     raise ValueError("OLLAMA_URL is not set")
+
+ENABLE_FAKE_TOOLS = os.getenv("ENABLE_FAKE_TOOLS", "false").lower() == "true"
 
 app = FastAPI()
 
@@ -133,6 +136,65 @@ class StreamingClient:
 # Initialize the streaming client
 streaming_client = StreamingClient(OLLAMA_URL)
 
+# Tool Function Support
+class ToolFunctionSupport:
+    @staticmethod
+    def extract_tool_request(body_text):
+        """Extract tool calling request details from body text"""
+        try:
+            data = json.loads(body_text)
+            tools = data.get("tools", [])
+            tool_choice = data.get("tool_choice", None)
+            return bool(tools), tool_choice
+        except:
+            return False, None
+    
+    @staticmethod
+    def detect_tool_call_pattern(text):
+        """Detect if text contains something that looks like a tool call request"""
+        tool_call_patterns = [
+            r'<function_calls>',
+            r'<function>(.*?)</function>',
+            r'"type":\s*"function"',
+            r'function\s*\(',
+            r'tool\s*\(',
+        ]
+        
+        for pattern in tool_call_patterns:
+            if re.search(pattern, text, re.DOTALL):
+                return True
+        return False
+    
+    @staticmethod
+    def transform_to_tool_response(content, tools_requested=False, tool_choice=None):
+        """Transform regular completion response to include tool calls if needed"""
+        if not tools_requested:
+            return content
+            
+        # Check if content already has what appears to be a function call
+        if ToolFunctionSupport.detect_tool_call_pattern(content):
+            # Extract the function call pattern and convert to function_call format
+            return content
+            
+        # If no tool calls detected in the content, create a synthetic one
+        # This is a simplified example - real implementation would need more intelligence
+        tool_call = {
+            "id": "call_" + str(int(time.time())),
+            "type": "function",
+            "function": {
+                "name": "suggested_edit",
+                "arguments": json.dumps({
+                    "content": content,
+                    "reason": "Generated response from Ollama model"
+                })
+            }
+        }
+        
+        return json.dumps({
+            "content": "",
+            "tool_calls": [tool_call]
+        })
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
 async def proxy(path: str, request: Request):
     # Validate API key for all request types
@@ -166,9 +228,17 @@ async def proxy(path: str, request: Request):
             # Check body for stream: true (common in OpenAI-style requests)
             elif '"stream": true' in body_text or '"stream":true' in body_text:
                 is_streaming_request = True
+                
+        # Check if tools/function calling is requested
+        has_tools_request = False
+        tool_choice = None
+        if ENABLE_FAKE_TOOLS and request.method == "POST" and path.endswith("/chat/completions"):
+            has_tools_request, tool_choice = ToolFunctionSupport.extract_tool_request(body_text)
+            logger.info(f"Tools requested: {has_tools_request}, Tool choice: {tool_choice}")
     except Exception as e:
         logger.error(f"Error decoding request body: {e}")
         is_streaming_request = False
+        has_tools_request = False
 
     # Remove authorization headers before forwarding to Ollama
     headers = {k: v for k, v in request.headers.items()}
@@ -243,8 +313,51 @@ async def proxy(path: str, request: Request):
                     media_type="text/event-stream"
                 )
             else:
+                content = await response.aread()
+                
+                # Transform response for function calling if requested
+                if ENABLE_FAKE_TOOLS and has_tools_request and path.endswith("/chat/completions"):
+                    try:
+                        response_data = json.loads(content)
+                        # Get the content from the response
+                        if "choices" in response_data and len(response_data["choices"]) > 0:
+                            if "message" in response_data["choices"][0]:
+                                content_text = response_data["choices"][0]["message"].get("content", "")
+                                
+                                # Transform the content to include tool calls
+                                transformed_content = ToolFunctionSupport.transform_to_tool_response(
+                                    content_text, has_tools_request, tool_choice
+                                )
+                                
+                                # Update the response
+                                if transformed_content != content_text:
+                                    try:
+                                        transformed_data = json.loads(transformed_content)
+                                        # If it's a valid JSON, replace the message content
+                                        response_data["choices"][0]["message"] = transformed_data
+                                    except:
+                                        # If not valid JSON, just replace the content
+                                        response_data["choices"][0]["message"]["content"] = ""
+                                        if "tool_calls" not in response_data["choices"][0]["message"]:
+                                            tool_call = {
+                                                "id": "call_" + str(int(time.time())),
+                                                "type": "function",
+                                                "function": {
+                                                    "name": "suggested_edit",
+                                                    "arguments": json.dumps({
+                                                        "content": content_text,
+                                                        "reason": "Generated from Ollama model"
+                                                    })
+                                                }
+                                            }
+                                            response_data["choices"][0]["message"]["tool_calls"] = [tool_call]
+                                
+                                content = json.dumps(response_data).encode()
+                    except Exception as e:
+                        logger.error(f"Error transforming response for function calling: {e}")
+                
                 return Response(
-                    content=await response.aread(),
+                    content=content,
                     status_code=response.status_code,
                     headers=response_headers
                 )

@@ -235,6 +235,21 @@ async def proxy(path: str, request: Request):
         if ENABLE_FAKE_TOOLS and request.method == "POST" and path.endswith("/chat/completions"):
             has_tools_request, tool_choice = ToolFunctionSupport.extract_tool_request(body_text)
             logger.info(f"Tools requested: {has_tools_request}, Tool choice: {tool_choice}")
+            
+            # If tools are requested, we need to modify the request body before forwarding to Ollama
+            if has_tools_request:
+                try:
+                    request_data = json.loads(body_text)
+                    # Remove tools and tool_choice from the request, as they're not supported by Ollama
+                    if "tools" in request_data:
+                        del request_data["tools"]
+                    if "tool_choice" in request_data:
+                        del request_data["tool_choice"]
+                    # Update the body_bytes with the modified request
+                    body_bytes = json.dumps(request_data).encode("utf-8")
+                    logger.info(f"→ Modified request body (removed tools): {body_bytes.decode('utf-8', errors='ignore')}")
+                except Exception as e:
+                    logger.error(f"Error modifying request to remove tools: {e}")
     except Exception as e:
         logger.error(f"Error decoding request body: {e}")
         is_streaming_request = False

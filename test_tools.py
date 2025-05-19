@@ -97,11 +97,15 @@ async def test_tool_completion(client, api_key, proxy_url, model):
     url = f"{proxy_url}/v1/chat/completions"
     
     try:
+        # Print the request payload for debugging
+        logger.info(f"Request payload: {json.dumps(payload, indent=2)}")
+        
         response = await client.post(url, headers=headers, json=payload)
         response.raise_for_status()
         data = response.json()
         
         logger.info(f"Response status: {response.status_code}")
+        logger.info(f"Full response: {json.dumps(data, indent=2)}")
         
         # Validate structure with tools
         assert "choices" in data, "Response missing 'choices'"

@@ -260,7 +260,11 @@ async def proxy(path: str, request: Request):
     headers.pop("authorization", None)
     headers.pop("x-api-key", None)
     headers['host'] = 'localhost:11434'  # 🔧 override for Ollama
-
+    
+    # Update Content-Length header if we modified the body
+    if has_tools_request and "content-length" in headers:
+        headers["content-length"] = str(len(body_bytes))
+        logger.info(f"→ Updated Content-Length: {headers['content-length']}")
 
     # Handle streaming requests differently
     if is_streaming_request:

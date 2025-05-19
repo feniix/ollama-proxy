@@ -18,7 +18,7 @@ load_dotenv(override=True)
 # Default configuration
 DEFAULT_API_KEY = os.getenv("API_KEY", "your_custom_api_key")
 DEFAULT_PROXY_URL = f"http://{os.getenv('API_HOST', '127.0.0.1')}:{os.getenv('API_PORT', '11435')}"
-DEFAULT_MODEL = "llama3"  # Change to match your Ollama model name
+DEFAULT_MODEL = "llama3:8b"  # Change to match your Ollama model name
 
 # Create a mock Cursor edit_file tool definition
 CURSOR_EDIT_FILE_TOOL = {

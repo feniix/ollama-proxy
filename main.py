@@ -215,6 +215,74 @@ async def proxy(path: str, request: Request):
     # Get the request body without consuming it
     body_bytes = await request.body()
     
+    # Special handling for tool validation check
+    if request.method == "POST" and path.endswith("/chat/completions") and ENABLE_FAKE_TOOLS:
+        try:
+            body_text = body_bytes.decode("utf-8")
+            request_data = json.loads(body_text)
+            
+            # Check for tool validation requests - different applications may use different approaches
+            is_validation_request = False
+            
+            # Check 1: Request has "validate" in the content
+            if "messages" in request_data and len(request_data["messages"]) > 0:
+                content = request_data["messages"][-1].get("content", "").lower()
+                if "validate" in content or "check capabilities" in content or "tool support" in content:
+                    is_validation_request = True
+            
+            # Check 2: Request has tools but a very short message (may be a capability check)
+            if not is_validation_request and "tools" in request_data and "messages" in request_data:
+                if len(request_data["messages"]) == 1 and len(str(request_data["messages"][0].get("content", ""))) < 50:
+                    is_validation_request = True
+                    
+            # If this seems like a validation request, return a successful response
+            if is_validation_request:
+                logger.info(f"Detected possible tool validation request: {body_text[:100]}...")
+                logger.info("Returning successful validation response")
+                
+                # If the request has tool_calls in it, include them in the response
+                tool_calls = []
+                if "tools" in request_data and len(request_data["tools"]) > 0:
+                    first_tool = request_data["tools"][0]
+                    if "function" in first_tool:
+                        first_function = first_tool["function"]
+                        tool_calls = [{
+                            "id": f"call_validation_{int(time.time())}",
+                            "type": "function",
+                            "function": {
+                                "name": first_function.get("name", "suggested_edit"),
+                                "arguments": json.dumps({
+                                    "content": "Tool validation successful"
+                                })
+                            }
+                        }]
+                
+                # Return a response with or without tool calls based on request
+                assistant_message = {
+                    "role": "assistant", 
+                    "content": "" if tool_calls else "Tool support validated successfully."
+                }
+                
+                if tool_calls:
+                    assistant_message["tool_calls"] = tool_calls
+                
+                return JSONResponse(status_code=200, content={
+                    "id": f"chatcmpl-validation-{int(time.time())}",
+                    "object": "chat.completion",
+                    "created": int(time.time()),
+                    "model": request_data.get("model", "unknown"),
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": assistant_message,
+                            "finish_reason": "stop"
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+                })
+        except Exception as e:
+            logger.error(f"Error checking for validation request: {e}")
+    
     # Log the request body for debugging
     try:
         body_text = body_bytes.decode("utf-8")

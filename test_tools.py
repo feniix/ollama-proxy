@@ -77,21 +77,17 @@ async def test_tool_completion(client, api_key, proxy_url, model):
             {
                 "type": "function",
                 "function": {
-                    "name": "edit_file",
-                    "description": "Edit a file",
+                    "name": "suggested_edit",
+                    "description": "Edit content",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "file_path": {
-                                "type": "string",
-                                "description": "Path to the file"
-                            },
                             "content": {
                                 "type": "string",
-                                "description": "Content to write"
+                                "description": "Content to edit"
                             }
                         },
-                        "required": ["file_path", "content"]
+                        "required": ["content"]
                     }
                 }
             }
@@ -143,6 +139,15 @@ async def test_tool_completion(client, api_key, proxy_url, model):
                 logger.info(f"Model content response: {message['content'][:100]}...")
             
             return False
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Tool completion test failed: {e}")
+        logger.error(f"Response status code: {e.response.status_code}")
+        try:
+            error_body = e.response.json()
+            logger.error(f"Error response body: {json.dumps(error_body)}")
+        except:
+            logger.error(f"Raw error response: {e.response.text}")
+        return False
     except Exception as e:
         logger.error(f"Tool completion test failed: {e}")
         return False

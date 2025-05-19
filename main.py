@@ -296,6 +296,12 @@ async def proxy(path: str, request: Request):
             except httpx.RequestError as e:
                 logger.error(f"Request to Ollama failed: {e}")
                 return JSONResponse(status_code=502, content={"error": "Failed to reach backend"})
+            except Exception as e:
+                logger.error(f"Error forwarding request to Ollama: {str(e)}")
+                if hasattr(e, 'response') and e.response is not None:
+                    logger.error(f"Response status: {e.response.status_code}")
+                    logger.error(f"Response body: {e.response.text}")
+                return JSONResponse(status_code=500, content={"error": str(e)})
 
             excluded_headers = {"content-encoding", "transfer-encoding", "content-length", "connection"}
             response_headers = {k: v for k, v in response.headers.items() if k.lower() not in excluded_headers}
